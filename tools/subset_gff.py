@@ -1,16 +1,17 @@
-# see https://bioinformatics.stackexchange.com/questions/13942/how-to-subset-genes-and-its-nested-features-from-a-gff-file-using-a-gene-list
+# see
+# https://bioinformatics.stackexchange.com/questions/13942/how-to-subset-genes-and-its-nested-features-from-a-gff-file-using-a-gene-list
 import pandas as pd
 import pyranges as pr
 import argparse
 
 parser = argparse.ArgumentParser(description='Filter GFF3 to relevant transcripts')
-parser.add_argument('-a', '--full_annotation', metavar='gff3', required = True,
+parser.add_argument('-a', '--full_annotation', metavar='gff3', required=True,
                     help='path to GFF3 annotation file')
-parser.add_argument('-t', '--tpm_threshold', metavar="tpm", type=float, default = -1,
+parser.add_argument('-t', '--tpm_threshold', metavar="tpm", type=float, default=-1,
                     help='minimum TPM for GFF3 filtering')
-parser.add_argument('-q', '--quant', metavar='quant.sf', required = True,
+parser.add_argument('-q', '--quant', metavar='quant.sf', required=True,
                     help='Salmon quantification file')
-parser.add_argument('-o', '--subset_annotation', metavar='gff3', required = True,
+parser.add_argument('-o', '--subset_annotation', metavar='gff3', required=True,
                     help='path for subsetted GFF3 file')
 
 args = parser.parse_args()
