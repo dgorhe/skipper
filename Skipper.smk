@@ -282,7 +282,7 @@ rule parse_gff:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/parse_gff.R {input.gff} {input.rankings} {output.partition} {output.feature_annotations} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/parse_gff.R {input.gff} {input.rankings} {output.partition} {output.feature_annotations}) &> {log}
         """
 
 
@@ -310,11 +310,11 @@ rule run_initial_fastqc:
         "docker://howardxu520/skipper:fastqc_0.12.1"
     shell:
         """
-        zcat {input.fq} | \
+        (zcat {input.fq} | \
             fastqc stdin:{wildcards.replicate_label} \
                 --extract \
                 --outdir output/fastqc/initial \
-                -t {threads} &> {log}
+                -t {threads}) &> {log}
         """
 
 
@@ -342,12 +342,12 @@ rule trim_fastq:
         "docker://howardxu520/skipper:skewer_0.2.2"
     shell:
         """
-        zcat {input.fq} | \
+        (zcat {input.fq} | \
             skewer \
                 -t {threads} \
                 -x {input.adapter} \
                 -o output/fastqs/trimmed/{wildcards.replicate_label} \
-                -z -r 0.2 -d 0.2 -q 13 -l 20 - &> {log}
+                -z -r 0.2 -d 0.2 -q 13 -l 20 -) &> {log}
         """
 
 
@@ -374,7 +374,7 @@ rule extract_umi:
         "docker://howardxu520/skipper:fastp_0.23.4"
     shell:
         """
-        fastp \
+        (fastp \
             -i {input.fq} \
             -o {output.fq_umi} \
             -A \
@@ -383,7 +383,7 @@ rule extract_umi:
             --umi_loc=read1 \
             -j output/fastp/{wildcards.replicate_label}.fastp.json \
             -h output/fastp/{wildcards.replicate_label}.fastp.html \
-            -w {threads} &> {log}
+            -w {threads}) &> {log}
         """
 
 
@@ -409,10 +409,10 @@ rule run_trimmed_fastqc:
         "docker://howardxu520/skipper:fastqc_0.12.1"
     shell:
         """
-        fastqc {input} \
+        (fastqc {input} \
             --extract \
             --outdir output/fastqc/processed \
-            -t {threads} &> {log}
+            -t {threads}) &> {log}
         """
 
 
@@ -440,7 +440,7 @@ rule align_reads:
         "docker://howardxu520/skipper:star_2.7.10b"
     shell:
         """
-        STAR \
+        (STAR \
             --alignEndsType EndToEnd \
             --genomeDir {params.star_sjdb} \
             --genomeLoad NoSharedMemory \
@@ -464,7 +464,7 @@ rule align_reads:
             --outStd Log \
             --readFilesIn {input.fq} \
             --runMode alignReads \
-            --runThreadN {threads} &> {log}
+            --runThreadN {threads}) &> {log}
         """
 
 
@@ -488,11 +488,11 @@ rule sort_bam:
         "docker://howardxu520/skipper:samtools_1.17_bedtools_2.31.0"
     shell:
         """
-        samtools sort \
+        (samtools sort \
             -T {wildcards.replicate_label} \
             -@ {threads} \
             -o {output.sort} \
-            {input.bam} &> {log}
+            {input.bam}) &> {log}
         """
 
 
@@ -516,7 +516,7 @@ rule index_bams:
         "docker://howardxu520/skipper:samtools_1.17_bedtools_2.31.0"
     shell:
         """
-        samtools index -@ {threads} {input.bam} &> {log}
+        (samtools index -@ {threads} {input.bam}) &> {log}
         """
 
 
@@ -541,12 +541,12 @@ rule dedup_umi:
         "docker://howardxu520/skipper:umicollapse_1.0.0"
     shell:
         """
-        java -server -Xms8G -Xmx8G -Xss20M \
+        (java -server -Xms8G -Xmx8G -Xss20M \
             -jar {umicollapse_path}/umicollapse.jar bam \
             -i {input.bam} \
             -o {output.bam_dedup} \
             --umi-sep : \
-            --two-pass &> {log}
+            --two-pass) &> {log}
         """
 
 
@@ -577,16 +577,16 @@ rule make_unscaled_bigwig:
         "docker://howardxu520/skipper:bigwig_1.0"
     shell:
         """
-        bedtools genomecov -5 -strand + -bg -ibam {input.bam} | \
+        (bedtools genomecov -5 -strand + -bg -ibam {input.bam} | \
             sort -k1,1 -k2,2n | \
-            grep -v EBV > {output.bg_plus} &> {log}
+            grep -v EBV > {output.bg_plus}) &> {log}
         
-        bedtools genomecov -5 -strand - -bg -ibam {input.bam} | \
+        (bedtools genomecov -5 -strand - -bg -ibam {input.bam} | \
             sort -k1,1 -k2,2n | \
-            grep -v EBV > {output.bg_minus} &>> {log}
+            grep -v EBV > {output.bg_minus}) &>> {log}
         
-        bedGraphToBigWig {output.bg_plus} {CHROM_SIZES} {output.bw_plus} &>> {log}
-        bedGraphToBigWig {output.bg_minus} {CHROM_SIZES} {output.bw_minus} &>> {log}
+        (bedGraphToBigWig {output.bg_plus} {CHROM_SIZES} {output.bw_plus}) &>> {log}
+        (bedGraphToBigWig {output.bg_minus} {CHROM_SIZES} {output.bw_minus}) &>> {log}
         """
 
 
@@ -613,18 +613,18 @@ rule make_scaled_bigwig:
         "docker://howardxu520/skipper:bigwig_1.0"
     shell:
         """
-        factor=$(samtools idxstats {input.bam} | cut -f 3 | paste -sd+ | bc | xargs -I {{}} echo 'scale=6; 10^6 / {{}}' | bc) &> {log}
+        (factor=$(samtools idxstats {input.bam} | cut -f 3 | paste -sd+ | bc | xargs -I {{}} echo 'scale=6; 10^6 / {{}}' | bc)) &> {log}
         
-        bedtools genomecov -scale $factor -5 -strand + -bg -ibam {input.bam} | \
+        (bedtools genomecov -scale $factor -5 -strand + -bg -ibam {input.bam} | \
             sort -k1,1 -k2,2n | \
-            grep -v EBV > {output.bg_plus} &>> {log}
+            grep -v EBV > {output.bg_plus}) &>> {log}
         
-        bedtools genomecov -scale $factor -5 -strand - -bg -ibam {input.bam} | \
+        (bedtools genomecov -scale $factor -5 -strand - -bg -ibam {input.bam} | \
             sort -k1,1 -k2,2n | \
-            grep -v EBV > {output.bg_minus} &>> {log}
+            grep -v EBV > {output.bg_minus}) &>> {log}
         
-        bedGraphToBigWig {output.bg_plus} {CHROM_SIZES} {output.bw_plus} &>> {log}
-        bedGraphToBigWig {output.bg_minus} {CHROM_SIZES} {output.bw_minus} &>> {log}
+        (bedGraphToBigWig {output.bg_plus} {CHROM_SIZES} {output.bw_plus}) &>> {log}
+        (bedGraphToBigWig {output.bg_minus} {CHROM_SIZES} {output.bw_minus}) &>> {log}
         """
 
 
@@ -649,23 +649,23 @@ rule uniq_repeats:
         "docker://howardxu520/skipper:bedtools_2.31.0"
     shell:
         """
-        zcat {REPEAT_TABLE} | \
+        (zcat {REPEAT_TABLE} | \
             awk -v OFS='\t' '{{print $6,$7,$8,$11 ":" name_count[$11]++, $2, $10,$11,$12,$13}} \
             $13 == "L1" || $13 == "Alu" {{$11 = $11 "_AS"; $12 = $12 "_AS"; $13 = $13 "_AS"; \
             if($10 == "+") {{$10 = "-"}} else {{$10 = "+"}}; \
             print $6,$7,$8,$11 ":" name_count[$11]++, $2, $10,$11,$12,$13}}' | \
             tail -n +2 | \
             bedtools sort -i - | \
-            gzip > {output.sorted_bed} &> {log}
+            gzip > {output.sorted_bed}) &> {log}
         
-        bedtools coverage -s -d -a {output.sorted_bed} -b {output.sorted_bed} | \
+        (bedtools coverage -s -d -a {output.sorted_bed} -b {output.sorted_bed} | \
             awk -v OFS='\t' '$NF >1 {{print $1,$2+$(NF-1)-1,$2+$(NF-1),$4,$5,$6}}' | \
             bedtools sort -i - | \
             bedtools merge -c 4,5,6 -o distinct -s -i - | \
             bedtools subtract -s -a {output.sorted_bed} -b - | \
             bedtools nuc -s -fi {input.genome} -bed - | \
             awk -v OFS='\t' 'NR > 1 {{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$11}}' | \
-            gzip -c > {output.unique_repeats} &>> {log}
+            gzip -c > {output.unique_repeats}) &>> {log}
         """
 
 
@@ -691,13 +691,13 @@ rule quantify_repeats:
         "docker://howardxu520/skipper:bedtools_2.31.0"
     shell:
         """
-        bedtools bamtobed -i {input.bam} | \
+        (bedtools bamtobed -i {input.bam} | \
             awk '($1 != "chrEBV") && ($4 !~ "/{UNINFORMATIVE_READ}$")' | \
             bedtools flank -s -l 1 -r 0 -g {CHROM_SIZES} -i - | \
             bedtools shift -p 1 -m -1 -g {CHROM_SIZES} -i - | \
             bedtools sort -i - | \
             bedtools coverage -s -counts -a {input.repeats} -b - | \
-            awk 'BEGIN {{print "{wildcards.replicate_label}"}} {{print $NF}}' > {output.counts} &> {log}
+            awk 'BEGIN {{print "{wildcards.replicate_label}"}} {{print $NF}}' > {output.counts}) &> {log}
         """
 
 
@@ -725,24 +725,24 @@ rule make_repeat_count_tables:
         "benchmarks/counts/{experiment_label}.all_replicates.make_repeat_count_table.txt"
     shell:
         """
-        echo "repeat_name" | paste - {input.replicate_counts} | sed -n '1p' | gzip > {output.name_table} &> {log}
-        echo "repeat_class" | paste - {input.replicate_counts} | sed -n '1p' | gzip > {output.class_table} &>> {log}
-        echo "repeat_family" | paste - {input.replicate_counts} | sed -n '1p' | gzip > {output.family_table} &>> {log}
+        (echo "repeat_name" | paste - {input.replicate_counts} | sed -n '1p' | gzip > {output.name_table}) &> {log}
+        (echo "repeat_class" | paste - {input.replicate_counts} | sed -n '1p' | gzip > {output.class_table}) &>> {log}
+        (echo "repeat_family" | paste - {input.replicate_counts} | sed -n '1p' | gzip > {output.family_table}) &>> {log}
         
-        paste <(zcat {input.unique_repeats} | awk -v OFS='\t' 'BEGIN {{print "repeat_name";}} {{print $7}}') {input.replicate_counts} | \
+        (paste <(zcat {input.unique_repeats} | awk -v OFS='\t' 'BEGIN {{print "repeat_name";}} {{print $7}}') {input.replicate_counts} | \
             awk -v OFS='\t' 'NR > 1 {{for(i = 2; i <= NF; i++) {{tabulation[$1][i] += $i}} }} \
             END {{for(name in tabulation) {{ printf name; for(i = 2; i <= NF; i++) {{printf "\t" tabulation[name][i]}} print "";}} }}' | \
-            sort -k 1,1 | gzip >> {output.name_table} &>> {log}
+            sort -k 1,1 | gzip >> {output.name_table}) &>> {log}
         
-        paste <(zcat {input.unique_repeats} | awk -v OFS='\t' 'BEGIN {{print "repeat_class";}} {{print $8}}') {input.replicate_counts} | \
+        (paste <(zcat {input.unique_repeats} | awk -v OFS='\t' 'BEGIN {{print "repeat_class";}} {{print $8}}') {input.replicate_counts} | \
             awk -v OFS='\t' 'NR > 1 {{for(i = 2; i <= NF; i++) {{tabulation[$1][i] += $i}} }} \
             END {{for(name in tabulation) {{ printf name; for(i = 2; i <= NF; i++) {{printf "\t" tabulation[name][i]}} print "";}} }}' | \
-            sort -k 1,1 | gzip >> {output.class_table} &>> {log}
+            sort -k 1,1 | gzip >> {output.class_table}) &>> {log}
         
-        paste <(zcat {input.unique_repeats} | awk -v OFS='\t' 'BEGIN {{print "repeat_family";}} {{print $9}}') {input.replicate_counts} | \
+        (paste <(zcat {input.unique_repeats} | awk -v OFS='\t' 'BEGIN {{print "repeat_family";}} {{print $9}}') {input.replicate_counts} | \
             awk -v OFS='\t' 'NR > 1 {{for(i = 2; i <= NF; i++) {{tabulation[$1][i] += $i}} }} \
             END {{for(name in tabulation) {{ printf name; for(i = 2; i <= NF; i++) {{printf "\t" tabulation[name][i]}} print "";}} }}' | \
-            sort -k 1,1 | gzip >> {output.family_table} &>> {log}
+            sort -k 1,1 | gzip >> {output.family_table}) &>> {log}
         """
 
 
@@ -765,7 +765,7 @@ rule fit_clip_betabinomial_re_model:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/fit_clip_betabinom_re.R {input.table} {wildcards.experiment_label} {wildcards.clip_replicate_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/fit_clip_betabinom_re.R {input.table} {wildcards.experiment_label} {wildcards.clip_replicate_label}) &> {log}
         """
 
 
@@ -788,7 +788,7 @@ rule fit_input_betabinomial_re_model:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/fit_input_betabinom_re.R {input.table} {wildcards.experiment_label} {wildcards.input_replicate_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/fit_input_betabinom_re.R {input.table} {wildcards.experiment_label} {wildcards.input_replicate_label}) &> {log}
         """
 
 
@@ -824,7 +824,7 @@ rule call_enriched_re:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/call_enriched_re.R {input.table} {input.repeats} {input.parameters} {params.input_replicate_label} {wildcards.clip_replicate_label} {wildcards.experiment_label}.{wildcards.clip_replicate_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/call_enriched_re.R {input.table} {input.repeats} {input.parameters} {params.input_replicate_label} {wildcards.clip_replicate_label} {wildcards.experiment_label}.{wildcards.clip_replicate_label}) &> {log}
         """
 
 
@@ -852,7 +852,7 @@ rule find_reproducible_enriched_re:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/identify_reproducible_re.R output/enriched_re/ {wildcards.experiment_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/identify_reproducible_re.R output/enriched_re/ {wildcards.experiment_label}) &> {log}
         """
 
 
@@ -878,14 +878,14 @@ rule partition_bam_reads:
         "docker://howardxu520/skipper:bedtools_2.31.0"
     shell:
         """
-        bedtools bamtobed -i {input.bam} | \
+        (bedtools bamtobed -i {input.bam} | \
             awk '($1 != "chrEBV") && ($4 !~ "/{UNINFORMATIVE_READ}$")' | \
             bedtools flank -s -l 1 -r 0 -g {CHROM_SIZES} -i - | \
             bedtools shift -p 1 -m -1 -g {CHROM_SIZES} -i - | \
             bedtools sort -i - | \
             bedtools coverage -counts -s -a {input.region_partition} -b - | \
             cut -f 7 | \
-            awk 'BEGIN {{print "{wildcards.replicate_label}"}} {{print}}' > {output.counts} &> {log}
+            awk 'BEGIN {{print "{wildcards.replicate_label}"}} {{print}}' > {output.counts}) &> {log}
         """
 
 
@@ -909,7 +909,7 @@ rule calc_partition_nuc:
         "docker://howardxu520/skipper:bedtools_2.31.0"
     shell:
         """
-        bedtools nuc -s -fi {input.genome} -bed {input.partition} | gzip -c > {output.nuc} &> {log}
+        (bedtools nuc -s -fi {input.genome} -bed {input.partition} | gzip -c > {output.nuc}) &> {log}
         """
 
 
@@ -937,7 +937,7 @@ rule make_genome_count_table:
         "docker://howardxu520/skipper:bedtools_2.31.0"
     shell:
         """
-        paste <(zcat {input.partition} | awk -v OFS='\t' 'BEGIN {{print "chr\tstart\tend\tname\tscore\tstrand\tgc"}} NR > 1 {{print $1,$2,$3,$4,$5,$6,$8}}' ) {input.replicate_counts} | gzip -c > {output.count_table} &> {log}
+        (paste <(zcat {input.partition} | awk -v OFS='\t' 'BEGIN {{print "chr\tstart\tend\tname\tscore\tstrand\tgc"}} NR > 1 {{print $1,$2,$3,$4,$5,$6,$8}}' ) {input.replicate_counts} | gzip -c > {output.count_table}) &> {log}
         """
 
 
@@ -960,7 +960,7 @@ rule fit_input_betabinomial_model:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/fit_input_betabinom.R {input.table} {wildcards.experiment_label} {wildcards.input_replicate_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/fit_input_betabinom.R {input.table} {wildcards.experiment_label} {wildcards.input_replicate_label}) &> {log}
         """
 
 
@@ -983,7 +983,7 @@ rule fit_clip_betabinomial_model:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/fit_clip_betabinom.R {input.table} {wildcards.experiment_label} {wildcards.clip_replicate_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/fit_clip_betabinom.R {input.table} {wildcards.experiment_label} {wildcards.clip_replicate_label}) &> {log}
         """
 
 
@@ -1041,7 +1041,7 @@ rule call_enriched_windows:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/call_enriched_windows.R {input.table} {input.accession_rankings} {input.feature_annotations} {input.parameters} {params.input_replicate_label} {wildcards.clip_replicate_label} {wildcards.experiment_label}.{wildcards.clip_replicate_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/call_enriched_windows.R {input.table} {input.accession_rankings} {input.feature_annotations} {input.parameters} {params.input_replicate_label} {wildcards.clip_replicate_label} {wildcards.experiment_label}.{wildcards.clip_replicate_label}) &> {log}
         """
 
 
@@ -1070,7 +1070,7 @@ rule check_window_concordance:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/check_window_concordance.R output/tested_windows {wildcards.experiment_label} {BLACKLIST if BLACKLIST is not None else ""} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/check_window_concordance.R output/tested_windows {wildcards.experiment_label} {BLACKLIST if BLACKLIST is not None else ""}) &> {log}
         """
 
 
@@ -1100,7 +1100,7 @@ rule find_reproducible_enriched_windows:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/identify_reproducible_windows.R output/enriched_windows/ {wildcards.experiment_label} {BLACKLIST if BLACKLIST is not None else ""} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/identify_reproducible_windows.R output/enriched_windows/ {wildcards.experiment_label} {BLACKLIST if BLACKLIST is not None else ""}) &> {log}
         """
 
 
@@ -1125,7 +1125,7 @@ rule sample_background_windows_by_region:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/sample_matched_background_by_region.R {input.enriched_windows} {input.all_windows} 75 output/homer/region_matched_background {wildcards.experiment_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/sample_matched_background_by_region.R {input.enriched_windows} {input.all_windows} 75 output/homer/region_matched_background {wildcards.experiment_label}) &> {log}
         """
 
 
@@ -1169,14 +1169,14 @@ rule get_nt_coverage:
         "docker://howardxu520/skipper:samtools_1.17_bedtools_2.31.0"
     shell:
         """
-        zcat {input.windows} | \
+        (zcat {input.windows} | \
             tail -n +2 | \
             sort -k1,1 -k2,2n | \
             awk -v OFS='\t' '{{print $1, $2 -37, $3+37,$4,$5,$6}}' | \
             bedtools merge -i - -s -c 6 -o distinct | \
-            awk -v OFS='\t' '{{for(i=$2;i< $3;i++) {{print $1,i,i+1,"MW:" NR ":" i - $2,0,$4, NR}} }}' > {output.nt_census} &> {log}
+            awk -v OFS='\t' '{{for(i=$2;i< $3;i++) {{print $1,i,i+1,"MW:" NR ":" i - $2,0,$4, NR}} }}' > {output.nt_census}) &> {log}
         
-        samtools cat {input.input_bams} | \
+        (samtools cat {input.input_bams} | \
             bedtools intersect -s -wa -a - -b {output.nt_census} | \
             bedtools bamtobed -i - | \
             awk '($1 != "chrEBV") && ($4 !~ "/{UNINFORMATIVE_READ}$")' | \
@@ -1184,9 +1184,9 @@ rule get_nt_coverage:
             bedtools shift -p 1 -m -1 -g {CHROM_SIZES} -i - | \
             bedtools sort -i - | \
             bedtools coverage -counts -s -a {output.nt_census} -b - | \
-            awk '{{print $NF}}' > {output.nt_input_counts} &>> {log}
+            awk '{{print $NF}}' > {output.nt_input_counts}) &>> {log}
         
-        samtools cat {input.clip_bams} | \
+        (samtools cat {input.clip_bams} | \
             bedtools intersect -s -wa -a - -b {output.nt_census} | \
             bedtools bamtobed -i - | \
             awk '($1 != "chrEBV") && ($4 !~ "/{UNINFORMATIVE_READ}$")' | \
@@ -1194,9 +1194,9 @@ rule get_nt_coverage:
             bedtools shift -p 1 -m -1 -g {CHROM_SIZES} -i - | \
             bedtools sort -i - | \
             bedtools coverage -counts -s -a {output.nt_census} -b - | \
-            awk '{{print $NF}}' > {output.nt_clip_counts} &>> {log}
+            awk '{{print $NF}}' > {output.nt_clip_counts}) &>> {log}
         
-        paste {output.nt_census} {output.nt_input_counts} {output.nt_clip_counts} > {output.nt_coverage} &>> {log}
+        (paste {output.nt_census} {output.nt_input_counts} {output.nt_clip_counts} > {output.nt_coverage}) &>> {log}
         """
 
 
@@ -1219,7 +1219,7 @@ rule finemap_windows:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/finemap_enriched_windows.R {input.nt_coverage} output/finemapping/mapped_sites/ {wildcards.experiment_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/finemap_enriched_windows.R {input.nt_coverage} output/finemapping/mapped_sites/ {wildcards.experiment_label}) &> {log}
         """
 
 
@@ -1244,7 +1244,7 @@ rule run_homer:
         "docker://howardxu520/skipper:Homer_4.11"
     shell:
         """
-        findMotifsGenome.pl <(zcat {input.finemapped_windows} | awk -v OFS='\t' '{{print $4 ":"$9,$1,$2+1,$3,$6}}') \
+        (findMotifsGenome.pl <(zcat {input.finemapped_windows} | awk -v OFS='\t' '{{print $4 ":"$9,$1,$2+1,$3,$6}}') \
             {input.genome} \
             output/homer/finemapped_results/{wildcards.experiment_label} \
             -preparsedDir output/homer/preparsed \
@@ -1254,7 +1254,7 @@ rule run_homer:
             -S 20 \
             -len 5,6,7,8,9 \
             -nlen 1 \
-            -bg <(zcat {input.background} | awk -v OFS='\t' '{{print $4,$1,$2+1,$3,$6}}') &> {log}
+            -bg <(zcat {input.background} | awk -v OFS='\t' '{{print $4,$1,$2+1,$3,$6}}')) &> {log}
         """
 
 
@@ -1293,7 +1293,7 @@ rule consult_encode_reference:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/consult_encode_reference.R output/reproducible_enriched_windows output/reproducible_enriched_re {TOOL_DIR} skipper &> {log}
+        (Rscript --vanilla {TOOL_DIR}/consult_encode_reference.R output/reproducible_enriched_windows output/reproducible_enriched_re {TOOL_DIR} skipper) &> {log}
         """
 
 
@@ -1320,5 +1320,5 @@ rule consult_term_reference:
         "docker://howardxu520/skipper:R_4.1.3_1"
     shell:
         """
-        Rscript --vanilla {TOOL_DIR}/consult_term_reference.R {input.enriched_windows} {input.gene_sets} {input.gene_set_reference} {input.gene_set_distance} {wildcards.experiment_label} &> {log}
+        (Rscript --vanilla {TOOL_DIR}/consult_term_reference.R {input.enriched_windows} {input.gene_sets} {input.gene_set_reference} {input.gene_set_distance} {wildcards.experiment_label}) &> {log}
         """
